@@ -7,6 +7,7 @@
 
 #include "c_string.h"
 #include "c_stdlib.h"
+#include "c_stdio.h"
 
 #include "c_types.h"
 #include "mem.h"
@@ -344,6 +345,52 @@ lnet_userdata *net_get_udata_s( lua_State *L, int stack ) {
 #define net_get_udata(L) net_get_udata_s(L, 1)
 
 #pragma mark - Lua API
+
+static void net_udp_pf_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, ip_addr_t *addr, u16_t port) {
+  lnet_userdata *ud = (lnet_userdata*)arg;
+  if (!ud || !ud->pcb || ud->type != TYPE_UDP_SOCKET || ud->self_ref == LUA_NOREF) {
+    if (p) pbuf_free(p);
+    return;
+  }
+  
+  lnet_userdata *ud_fw = (lnet_userdata *)ud->client.cb_connect_ref;
+ 
+  //ud_to->client.cb_reconnect_ref = addr;
+  c_memcpy(&(ud->client.cb_reconnect_ref), addr, sizeof(ip_addr_t));
+  
+  c_printf("net_udp_pf_send: %d/%d from %d:%hd to %d:%hd \n", p->len, p->tot_len, *addr, port, ud->client.cb_reconnect_ref, ud_fw->udp_pcb->local_port);
+  err_t err = udp_sendto(ud_fw->udp_pcb, p, (ip_addr_t *)&(ud->client.cb_reconnect_ref), ud_fw->udp_pcb->local_port);
+  
+  if (err != ERR_OK) {
+    c_printf("net_udp_pf_err: %d\n", err);
+  }
+  
+  net_recv_cb(ud, p, addr, port);
+}
+
+// Lua: net.createPortForwarding(ud_from, ud_to, addr)
+int net_createPortForwarding( lua_State *L ) {
+  lnet_userdata *ud_from = net_get_udata_s(L, 1);
+  lnet_userdata *ud_to = net_get_udata_s(L, 2);
+  
+  size_t dl = 0;
+  ip_addr_t addr;
+  const char *domain = luaL_checklstring(L, 3, &dl);
+  if (!domain) return luaL_error(L, "need IP address");
+  if (!ipaddr_aton(domain, &addr)) return luaL_error(L, "invalid IP address");
+  
+  //ud_from->client.cb_connect_ref = ud_to;
+  c_memcpy(&(ud_from->client.cb_connect_ref), &(ud_to), sizeof(lnet_userdata *));
+  udp_recv(ud_from->udp_pcb, net_udp_pf_recv_cb, ud_from);
+  
+  //ud_to->client.cb_connect_ref = ud_from;
+  c_memcpy(&(ud_to->client.cb_connect_ref), &(ud_from), sizeof(lnet_userdata *));
+  //ud_to->client.cb_reconnect_ref = addr;
+  c_memcpy(&(ud_to->client.cb_reconnect_ref), &(addr), sizeof(ip_addr_t));
+  udp_recv(ud_to->udp_pcb, net_udp_pf_recv_cb, ud_to);
+  
+  return 1;
+}
 
 // Lua: server:listen(port, addr, function(c)), socket:listen(port, addr)
 int net_listen( lua_State *L ) {
@@ -981,6 +1028,7 @@ static const LUA_REG_TYPE net_map[] = {
   { LSTRKEY( "createServer" ),     LFUNCVAL( net_createServer ) },
   { LSTRKEY( "createConnection" ), LFUNCVAL( net_createConnection ) },
   { LSTRKEY( "createUDPSocket" ),  LFUNCVAL( net_createUDPSocket ) },
+  { LSTRKEY( "createPortForwarding" ),  LFUNCVAL( net_createPortForwarding ) },
   { LSTRKEY( "multicastJoin"),     LFUNCVAL( net_multicastJoin ) },
   { LSTRKEY( "multicastLeave"),    LFUNCVAL( net_multicastLeave ) },
   { LSTRKEY( "dns" ),              LROVAL( net_dns_map ) },
