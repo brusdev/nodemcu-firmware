@@ -356,10 +356,10 @@ static void net_udp_pf_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, i
   lnet_userdata *ud_fw = (lnet_userdata *)ud->client.cb_connect_ref;
  
   //ud_to->client.cb_reconnect_ref = addr;
-  c_memcpy(&(ud->client.cb_reconnect_ref), addr, sizeof(ip_addr_t));
+  c_memcpy(&(ud_fw->client.cb_reconnect_ref), addr, sizeof(ip_addr_t));
   
-  c_printf("net_udp_pf_send: %d/%d from %d:%hd to %d:%hd \n", p->len, p->tot_len, *addr, port, ud->client.cb_reconnect_ref, ud_fw->udp_pcb->local_port);
-  err_t err = udp_sendto(ud_fw->udp_pcb, p, (ip_addr_t *)&(ud->client.cb_reconnect_ref), ud_fw->udp_pcb->local_port);
+  //c_printf("net_udp_pf_send: %d/%d from %d:%hd to %d:%hd \n", p->len, p->tot_len, *addr, port, ud->client.cb_reconnect_ref, ud->udp_pcb->local_port);
+  err_t err = udp_sendto(ud_fw->udp_pcb, p, (ip_addr_t *)&(ud->client.cb_reconnect_ref), ud->udp_pcb->local_port);
   
   if (err != ERR_OK) {
     c_printf("net_udp_pf_err: %d\n", err);
